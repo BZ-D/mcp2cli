@@ -257,6 +257,8 @@ func toolExample(commandName string, tool mcp.Tool, spec schema.Spec) string {
 			samples = append(samples, fmt.Sprintf("%s %s --%s=true", commandName, tool.Name, requiredField.FlagName))
 		case schema.KindObject, schema.KindArrayObject:
 			samples = append(samples, fmt.Sprintf("%s %s --%s '{\"key\":\"value\"}'", commandName, tool.Name, requiredField.FlagName))
+		case schema.KindArray:
+			samples = append(samples, fmt.Sprintf("%s %s --%s '[\"value\"]'", commandName, tool.Name, requiredField.FlagName))
 		default:
 			samples = append(samples, fmt.Sprintf("%s %s --%s value", commandName, tool.Name, requiredField.FlagName))
 		}

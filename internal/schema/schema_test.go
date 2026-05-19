@@ -98,3 +98,65 @@ func TestBuildArgumentsStrictValidation(t *testing.T) {
 		}
 	})
 }
+
+func TestNestedArraySchemaUsesJSONFlag(t *testing.T) {
+	tool := mcp.Tool{
+		Name: "update_range",
+		InputSchema: mcp.ToolInputSchema{
+			Type: "object",
+			Properties: map[string]any{
+				"backgroundColors": map[string]any{
+					"type": "array",
+					"items": map[string]any{
+						"type": "array",
+						"items": map[string]any{
+							"type": "string",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	spec, err := ParseToolInputSchema(tool)
+	if err != nil {
+		t.Fatalf("ParseToolInputSchema error: %v", err)
+	}
+	if got, want := len(spec.Fields), 1; got != want {
+		t.Fatalf("len(spec.Fields) = %d, want %d", got, want)
+	}
+	field := spec.Fields[0]
+	if got, want := field.Kind, KindArray; got != want {
+		t.Fatalf("field.Kind = %s, want %s", got, want)
+	}
+	if got, want := field.FlagName, "backgroundColors-json"; got != want {
+		t.Fatalf("field.FlagName = %q, want %q", got, want)
+	}
+
+	cmd := &cobra.Command{Use: "update_range"}
+	if err := RegisterFlags(cmd, spec); err != nil {
+		t.Fatalf("RegisterFlags error: %v", err)
+	}
+	if err := cmd.ParseFlags([]string{"--backgroundColors-json", `[["#fff","#000"],["#abc","#def"]]`}); err != nil {
+		t.Fatalf("ParseFlags error: %v", err)
+	}
+	args, err := BuildArguments(cmd, spec)
+	if err != nil {
+		t.Fatalf("BuildArguments error: %v", err)
+	}
+
+	rows, ok := args["backgroundColors"].([]any)
+	if !ok {
+		t.Fatalf("backgroundColors = %#v, want []any", args["backgroundColors"])
+	}
+	if got, want := len(rows), 2; got != want {
+		t.Fatalf("len(backgroundColors) = %d, want %d", got, want)
+	}
+	firstRow, ok := rows[0].([]any)
+	if !ok {
+		t.Fatalf("backgroundColors[0] = %#v, want []any", rows[0])
+	}
+	if got, want := firstRow[0], "#fff"; got != want {
+		t.Fatalf("backgroundColors[0][0] = %#v, want %#v", got, want)
+	}
+}

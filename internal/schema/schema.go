@@ -19,6 +19,7 @@ const (
 	KindNumber       Kind = "number"
 	KindBoolean      Kind = "boolean"
 	KindObject       Kind = "object"
+	KindArray        Kind = "array"
 	KindArrayString  Kind = "array[string]"
 	KindArrayInteger Kind = "array[integer]"
 	KindArrayNumber  Kind = "array[number]"
@@ -79,7 +80,7 @@ func ParseToolInputSchema(tool mcp.Tool) (Spec, error) {
 			field.Default = defaultValue
 			field.HasDefault = true
 		}
-		if field.Kind == KindObject || field.Kind == KindArrayObject {
+		if field.Kind == KindObject || field.Kind == KindArray || field.Kind == KindArrayObject {
 			field.FlagName = field.Name + "-json"
 		}
 		fields = append(fields, field)
@@ -100,7 +101,7 @@ func RegisterFlags(cmd *cobra.Command, spec Spec) error {
 			cmd.Flags().Float64(field.FlagName, toDefaultFloat64(field), usage)
 		case KindBoolean:
 			cmd.Flags().Bool(field.FlagName, toDefaultBool(field), usage)
-		case KindObject:
+		case KindObject, KindArray:
 			cmd.Flags().String(field.FlagName, toDefaultJSONObject(field), usage)
 		case KindArrayString, KindArrayInteger, KindArrayNumber, KindArrayBoolean, KindArrayObject:
 			cmd.Flags().StringArray(field.FlagName, toDefaultStringArray(field), usage)
@@ -241,6 +242,19 @@ func getChangedValue(cmd *cobra.Command, field Field) (any, error) {
 			return nil, fmt.Errorf("get --%s: %w", field.FlagName, err)
 		}
 		return parseJSONValue("--"+field.FlagName, raw)
+	case KindArray:
+		raw, err := cmd.Flags().GetString(field.FlagName)
+		if err != nil {
+			return nil, fmt.Errorf("get --%s: %w", field.FlagName, err)
+		}
+		value, err := parseJSONValue("--"+field.FlagName, raw)
+		if err != nil {
+			return nil, err
+		}
+		if _, ok := value.([]any); !ok {
+			return nil, fmt.Errorf("--%s must be a JSON array", field.FlagName)
+		}
+		return value, nil
 	case KindArrayString:
 		value, err := cmd.Flags().GetStringArray(field.FlagName)
 		if err != nil {
@@ -326,7 +340,7 @@ func validateEnum(field Field, value any) error {
 	}
 
 	switch field.Kind {
-	case KindArrayString, KindArrayInteger, KindArrayNumber, KindArrayBoolean, KindArrayObject:
+	case KindArray, KindArrayString, KindArrayInteger, KindArrayNumber, KindArrayBoolean, KindArrayObject:
 		items, ok := value.([]any)
 		if !ok {
 			return fmt.Errorf("--%s enum validation failed: unexpected array value type", field.FlagName)
@@ -378,6 +392,8 @@ func inferKind(raw map[string]any) (Kind, error) {
 			return KindArrayBoolean, nil
 		case "object":
 			return KindArrayObject, nil
+		case "array":
+			return KindArray, nil
 		case "", "string":
 			return KindArrayString, nil
 		default:
